@@ -6,13 +6,40 @@
 // 4. Go to your home screen → long press → add widget → Scriptable
 // 5. Choose the widget size → tap it → select "Crypto Portfolio"
 //
-// UPDATE YOUR PORTFOLIO below whenever you make new trades.
-// You can also run the sync script on your Mac to auto-update this.
+// Portfolio data is auto-synced from GitHub by sync_widget.py on your Mac.
+// No need to manually update this file when you buy new coins.
 
-// ─── YOUR PORTFOLIO (update after new trades) ───────────────
+// ─── Auto-update from GitHub ────────────────────────────────
+const GITHUB_RAW_URL = "https://raw.githubusercontent.com/crypticdenis/btc-avg-calculator/main/scriptable_widget.js";
+
+async function selfUpdate() {
+  try {
+    const req = new Request(GITHUB_RAW_URL);
+    const latest = await req.loadString();
+    // Only update if the remote version has different portfolio data
+    const fm = FileManager.iCloud();
+    const scriptPath = fm.joinPath(fm.documentsDirectory(), "Crypto Portfolio.js");
+    const current = fm.readString(scriptPath);
+    const remotePortfolio = latest.match(/const PORTFOLIO = \[[\s\S]*?\];/)?.[0];
+    const localPortfolio = current.match(/const PORTFOLIO = \[[\s\S]*?\];/)?.[0];
+    if (remotePortfolio && remotePortfolio !== localPortfolio) {
+      const updated = current.replace(/const PORTFOLIO = \[[\s\S]*?\];/, remotePortfolio);
+      fm.writeString(scriptPath, updated);
+      console.log("✅ Portfolio updated from GitHub");
+    }
+  } catch (e) {
+    console.log("⚠️ Self-update skipped: " + e);
+  }
+}
+
+// Run self-update in background (won't block widget render)
+selfUpdate();
+// ─────────────────────────────────────────────────────────────
+
+// ─── YOUR PORTFOLIO (auto-updated by sync_widget.py) ────────
 const PORTFOLIO = [
-  { asset: "BTC", amount: 0.03352436, totalCost: 2347.21, currency: "EUR", pair: "BTCEUR" },
-  { asset: "SOL", amount: 14.06094322, totalCost: 1430.31, currency: "EUR", pair: "SOLEUR" },
+  { asset: "BTC", amount: 0.03474734, totalCost: 2422.21, currency: "EUR", pair: "BTCEUR" },
+  { asset: "SOL", amount: 14.37596880, totalCost: 1454.31, currency: "EUR", pair: "SOLEUR" },
 ];
 // ─────────────────────────────────────────────────────────────
 
