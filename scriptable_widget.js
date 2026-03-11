@@ -97,6 +97,11 @@ async function createWidget() {
   pnlRow.font = Font.semiboldSystemFont(12);
   pnlRow.textColor = new Color(pnlColor);
 
+  // ── Total Invested ──
+  const investedRow = w.addText(`Invested ${CURRENCY_SYMBOL}${fmt(totalInvested)}`);
+  investedRow.font = Font.systemFont(10);
+  investedRow.textColor = new Color("#8b949e");
+
   w.addSpacer(10);
 
   // ── Per-asset rows ──
