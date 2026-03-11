@@ -6,41 +6,27 @@
 // 4. Go to your home screen → long press → add widget → Scriptable
 // 5. Choose the widget size → tap it → select "Crypto Portfolio"
 //
-// Portfolio data is auto-synced from GitHub by sync_widget.py on your Mac.
-// No need to manually update this file when you buy new coins.
+// Portfolio data is fetched live from GitHub (portfolio.json) on every refresh.
+// sync_widget.py on your Mac pushes updates automatically every hour.
 
-// ─── Auto-update from GitHub ────────────────────────────────
-const GITHUB_RAW_URL = "https://raw.githubusercontent.com/crypticdenis/btc-avg-calculator/main/scriptable_widget.js";
+// ─── Live portfolio from GitHub ─────────────────────────────
+const PORTFOLIO_JSON_URL = "https://raw.githubusercontent.com/crypticdenis/btc-avg-calculator/main/portfolio.json";
 
-async function selfUpdate() {
+async function loadPortfolio() {
   try {
-    const req = new Request(GITHUB_RAW_URL);
-    const latest = await req.loadString();
-    // Only update if the remote version has different portfolio data
-    const fm = FileManager.iCloud();
-    const scriptPath = fm.joinPath(fm.documentsDirectory(), "Crypto Portfolio.js");
-    const current = fm.readString(scriptPath);
-    const remotePortfolio = latest.match(/const PORTFOLIO = \[[\s\S]*?\];/)?.[0];
-    const localPortfolio = current.match(/const PORTFOLIO = \[[\s\S]*?\];/)?.[0];
-    if (remotePortfolio && remotePortfolio !== localPortfolio) {
-      const updated = current.replace(/const PORTFOLIO = \[[\s\S]*?\];/, remotePortfolio);
-      fm.writeString(scriptPath, updated);
-      console.log("✅ Portfolio updated from GitHub");
-    }
+    const req = new Request(PORTFOLIO_JSON_URL);
+    // Bust cache so iOS doesn't serve a stale response
+    req.headers = { "Cache-Control": "no-cache" };
+    return await req.loadJSON();
   } catch (e) {
-    console.log("⚠️ Self-update skipped: " + e);
+    console.log("⚠️ Could not fetch portfolio.json: " + e);
+    // Fallback so the widget still renders if offline
+    return [
+      { asset: "BTC", amount: 0.03474734, totalCost: 2422.21, currency: "EUR", pair: "BTCEUR" },
+      { asset: "SOL", amount: 14.37596880, totalCost: 1454.31, currency: "EUR", pair: "SOLEUR" },
+    ];
   }
 }
-
-// Run self-update in background (won't block widget render)
-selfUpdate();
-// ─────────────────────────────────────────────────────────────
-
-// ─── YOUR PORTFOLIO (auto-updated by sync_widget.py) ────────
-const PORTFOLIO = [
-  { asset: "BTC", amount: 0.03474734, totalCost: 2422.21, currency: "EUR", pair: "BTCEUR" },
-  { asset: "SOL", amount: 14.37596880, totalCost: 1454.31, currency: "EUR", pair: "SOLEUR" },
-];
 // ─────────────────────────────────────────────────────────────
 
 const CURRENCY_SYMBOL = "€";
@@ -70,6 +56,9 @@ function icon(asset) {
 
 // Build the widget
 async function createWidget() {
+  // Fetch portfolio data live from GitHub
+  const PORTFOLIO = await loadPortfolio();
+
   // Fetch all prices
   for (const p of PORTFOLIO) {
     p.currentPrice = await getPrice(p.pair);
