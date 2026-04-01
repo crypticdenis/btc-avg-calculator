@@ -1,4 +1,5 @@
 import Cocoa
+import CommonCrypto
 
 // ---------------------------------------------------------------------------
 // Crypto Portfolio Menu Bar Widget
@@ -8,6 +9,13 @@ import Cocoa
 // ---------------------------------------------------------------------------
 
 // MARK: - Data Models
+
+struct StorageInfo {
+    let asset: String
+    var onBinance: Double = 0
+    var onColdStorage: Double = 0
+    var total: Double { onBinance + onColdStorage }
+}
 
 struct Trade: Codable {
     let date: String
@@ -119,12 +127,103 @@ func formatNum(_ value: Double, decimals: Int = 2) -> String {
     return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
 }
 
+// MARK: - .env & Signed Binance API
+
+func loadEnv() -> (key: String, secret: String) {
+    let envURL = URL(fileURLWithPath: NSString(string: "~").expandingTildeInPath)
+        .appendingPathComponent("btc-avg-calculator")
+        .appendingPathComponent(".env")
+    guard let content = try? String(contentsOf: envURL, encoding: .utf8) else { return ("", "") }
+    var key = ""
+    var secret = ""
+    for line in content.components(separatedBy: .newlines) {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix("BINANCE_API_KEY=") {
+            key = String(trimmed.dropFirst("BINANCE_API_KEY=".count))
+        } else if trimmed.hasPrefix("BINANCE_API_SECRET=") {
+            secret = String(trimmed.dropFirst("BINANCE_API_SECRET=".count))
+        }
+    }
+    return (key, secret)
+}
+
+func hmacSHA256(_ message: String, key: String) -> String {
+    let keyData = Array(key.utf8)
+    let messageData = Array(message.utf8)
+    var hmacData = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
+    CCHmac(CCHmacAlgorithm(kCCHmacAlgSHA256), keyData, keyData.count, messageData, messageData.count, &hmacData)
+    return hmacData.map { String(format: "%02x", $0) }.joined()
+}
+
+func signedRequest(endpoint: String, params: [String: String], apiKey: String, apiSecret: String) -> Data? {
+    var allParams = params
+    allParams["timestamp"] = "\(Int(Date().timeIntervalSince1970 * 1000))"
+    let query = allParams.sorted(by: { $0.key < $1.key }).map { "\($0.key)=\($0.value)" }.joined(separator: "&")
+    let signature = hmacSHA256(query, key: apiSecret)
+    let urlStr = "https://api.binance.com\(endpoint)?\(query)&signature=\(signature)"
+    guard let url = URL(string: urlStr) else { return nil }
+    var request = URLRequest(url: url)
+    request.setValue(apiKey, forHTTPHeaderField: "X-MBX-APIKEY")
+    request.timeoutInterval = 10
+    return try? NSURLConnection.sendSynchronousRequest(request, returning: nil)
+}
+
+struct BinanceBalance: Codable {
+    let asset: String
+    let free: String
+    let locked: String
+}
+
+struct BinanceAccount: Codable {
+    let balances: [BinanceBalance]
+}
+
+struct BinanceWithdrawal: Codable {
+    let coin: String
+    let amount: String
+    let status: Int
+}
+
+func fetchStorageInfo(assets: [String]) -> [String: StorageInfo] {
+    let (apiKey, apiSecret) = loadEnv()
+    guard !apiKey.isEmpty, !apiSecret.isEmpty else { return [:] }
+
+    var result: [String: StorageInfo] = [:]
+    for a in assets { result[a] = StorageInfo(asset: a) }
+
+    // Fetch account balances
+    if let data = signedRequest(endpoint: "/api/v3/account", params: [:], apiKey: apiKey, apiSecret: apiSecret),
+       let account = try? JSONDecoder().decode(BinanceAccount.self, from: data) {
+        for b in account.balances {
+            if result.keys.contains(b.asset) {
+                let free = Double(b.free) ?? 0
+                let locked = Double(b.locked) ?? 0
+                result[b.asset]?.onBinance = free + locked
+            }
+        }
+    }
+
+    // Fetch completed withdrawals (status=6)
+    if let data = signedRequest(endpoint: "/sapi/v1/capital/withdraw/history", params: ["status": "6"], apiKey: apiKey, apiSecret: apiSecret),
+       let withdrawals = try? JSONDecoder().decode([BinanceWithdrawal].self, from: data) {
+        for w in withdrawals {
+            if result.keys.contains(w.coin) {
+                let amt = Double(w.amount) ?? 0
+                result[w.coin]?.onColdStorage += amt
+            }
+        }
+    }
+
+    return result
+}
+
 // MARK: - App Delegate
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem!
     var timer: Timer?
     var portfolio: [AssetSummary] = []
+    var storageInfo: [String: StorageInfo] = [:]
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -152,8 +251,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
 
+            // Fetch storage breakdown (Binance vs cold wallet)
+            let assets = summaries.map { $0.asset }
+            let storage = fetchStorageInfo(assets: assets)
+
             DispatchQueue.main.async {
                 self?.portfolio = summaries
+                self?.storageInfo = storage
                 self?.updateMenu()
                 self?.updateTitle()
             }
@@ -222,6 +326,37 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             addInfoItem(menu, "    Now:       \(sym)\(formatNum(p.currentPrice))  \(arrow) \(pSign)\(formatNum(p.pnlPct, decimals: 1))%")
             addInfoItem(menu, "    Value:     \(sym)\(formatNum(p.currentValue))  (\(pSign)\(sym)\(formatNum(abs(p.pnl))))")
             menu.addItem(NSMenuItem.separator())
+        }
+
+        // ── Storage Breakdown ──
+        if !storageInfo.isEmpty {
+            let storageHeader = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+            storageHeader.isEnabled = false
+            storageHeader.attributedTitle = NSAttributedString(
+                string: "📍 Where Your Crypto Is",
+                attributes: [.font: NSFont.boldSystemFont(ofSize: 14)]
+            )
+            menu.addItem(storageHeader)
+            menu.addItem(NSMenuItem.separator())
+
+            for p in portfolio {
+                guard let info = storageInfo[p.asset] else { continue }
+                let icon = assetIcon(p.asset)
+                let decimals = p.asset == "BTC" ? 8 : 4
+
+                let assetTitle = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+                assetTitle.isEnabled = false
+                assetTitle.attributedTitle = NSAttributedString(
+                    string: "\(icon) \(p.asset)",
+                    attributes: [.font: NSFont.boldSystemFont(ofSize: 13)]
+                )
+                menu.addItem(assetTitle)
+
+                addInfoItem(menu, "    🏦 Binance:      \(formatNum(info.onBinance, decimals: decimals))")
+                addInfoItem(menu, "    🔐 Cold Storage:  \(formatNum(info.onColdStorage, decimals: decimals))")
+                addInfoItem(menu, "    📊 Total:         \(formatNum(info.total, decimals: decimals))")
+                menu.addItem(NSMenuItem.separator())
+            }
         }
 
         // Actions
