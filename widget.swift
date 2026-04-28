@@ -300,63 +300,44 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let pnlEmoji = totalPnl >= 0 ? "🟢" : "🔴"
         let sign = totalPnl >= 0 ? "+" : ""
 
-        addInfoItem(menu, "💰 Invested:     €\(formatNum(totalInvested))")
-        addInfoItem(menu, "🏦 Value:          €\(formatNum(totalValue))")
-        addInfoItem(menu, "\(pnlEmoji) P&L:            \(sign)€\(formatNum(abs(totalPnl)))  (\(sign)\(formatNum(totalPnlPct, decimals: 1))%)")
+        addInfoItem(menu, "💰 Invested:    €\(formatNum(totalInvested))")
+        addInfoItem(menu, "🏦 Value:       €\(formatNum(totalValue))")
+        addInfoItem(menu, "\(pnlEmoji) P&L:          \(sign)€\(formatNum(abs(totalPnl)))  (\(sign)\(formatNum(totalPnlPct, decimals: 1))%)")
         menu.addItem(NSMenuItem.separator())
 
-        // Per-asset breakdown
+        // Per-asset breakdown with integrated storage info
         for p in portfolio {
             let sym = currencySymbol(p.currency)
             let icon = assetIcon(p.asset)
             let arrow = p.pnl >= 0 ? "▲" : "▼"
             let pSign = p.pnl >= 0 ? "+" : ""
+            let amtDecimals = p.asset == "BTC" ? 8 : 4
 
+            // ── Asset header ──
             let assetHeader = NSMenuItem(title: "", action: nil, keyEquivalent: "")
             assetHeader.attributedTitle = NSAttributedString(
-                string: "\(icon) \(p.asset)",
+                string: "\(icon) \(p.asset)  —  \(sym)\(formatNum(p.currentValue))  \(arrow) \(pSign)\(formatNum(p.pnlPct, decimals: 1))%",
                 attributes: [.font: NSFont.boldSystemFont(ofSize: 13)]
             )
             assetHeader.isEnabled = false
             menu.addItem(assetHeader)
 
-            let decimals = p.asset == "BTC" ? 8 : 4
-            addInfoItem(menu, "    Amount:    \(formatNum(p.totalBought, decimals: decimals)) \(p.asset)")
-            addInfoItem(menu, "    Avg Price: \(sym)\(formatNum(p.avgPrice))")
-            addInfoItem(menu, "    Now:       \(sym)\(formatNum(p.currentPrice))  \(arrow) \(pSign)\(formatNum(p.pnlPct, decimals: 1))%")
-            addInfoItem(menu, "    Value:     \(sym)\(formatNum(p.currentValue))  (\(pSign)\(sym)\(formatNum(abs(p.pnl))))")
-            menu.addItem(NSMenuItem.separator())
-        }
+            // ── Price line ──
+            addInfoItem(menu, "   Price:  \(sym)\(formatNum(p.currentPrice))  │  Avg: \(sym)\(formatNum(p.avgPrice))")
+            addInfoItem(menu, "   Total:  \(formatNum(p.totalBought, decimals: amtDecimals)) \(p.asset)  │  Cost: \(sym)\(formatNum(p.totalCost))")
 
-        // ── Storage Breakdown ──
-        if !storageInfo.isEmpty {
-            let storageHeader = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-            storageHeader.isEnabled = false
-            storageHeader.attributedTitle = NSAttributedString(
-                string: "📍 Where Your Crypto Is",
-                attributes: [.font: NSFont.boldSystemFont(ofSize: 14)]
-            )
-            menu.addItem(storageHeader)
-            menu.addItem(NSMenuItem.separator())
+            // ── Storage breakdown (inline) ──
+            if let info = storageInfo[p.asset] {
+                let binanceEUR = info.onBinance * p.currentPrice
+                let coldEUR = info.onColdStorage * p.currentPrice
 
-            for p in portfolio {
-                guard let info = storageInfo[p.asset] else { continue }
-                let icon = assetIcon(p.asset)
-                let decimals = p.asset == "BTC" ? 8 : 4
-
-                let assetTitle = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-                assetTitle.isEnabled = false
-                assetTitle.attributedTitle = NSAttributedString(
-                    string: "\(icon) \(p.asset)",
-                    attributes: [.font: NSFont.boldSystemFont(ofSize: 13)]
-                )
-                menu.addItem(assetTitle)
-
-                addInfoItem(menu, "    🏦 Binance:      \(formatNum(info.onBinance, decimals: decimals))")
-                addInfoItem(menu, "    🔐 Cold Storage:  \(formatNum(info.onColdStorage, decimals: decimals))")
-                addInfoItem(menu, "    📊 Total:         \(formatNum(info.total, decimals: decimals))")
-                menu.addItem(NSMenuItem.separator())
+                addInfoItem(menu, "   ┌─────────────────────────────────")
+                addInfoItem(menu, "   │ 🏦 Binance:  \(formatNum(info.onBinance, decimals: amtDecimals))  ≈ \(sym)\(formatNum(binanceEUR))")
+                addInfoItem(menu, "   │ 🔐 Cold:     \(formatNum(info.onColdStorage, decimals: amtDecimals))  ≈ \(sym)\(formatNum(coldEUR))")
+                addInfoItem(menu, "   └─────────────────────────────────")
             }
+
+            menu.addItem(NSMenuItem.separator())
         }
 
         // Actions
@@ -382,7 +363,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         item.isEnabled = false
         item.attributedTitle = NSAttributedString(
             string: text,
-            attributes: [.font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)]
+            attributes: [
+                .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
+                .foregroundColor: NSColor.white
+            ]
         )
         menu.addItem(item)
     }
