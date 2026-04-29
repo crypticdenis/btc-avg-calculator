@@ -4611,3 +4611,43 @@ fatal: could not read Username for 'https://github.com': Device not configured
 
 ✅ Sync complete!
 
+[main 71c4d51] sync: update portfolio widget 2026-04-28 12:41
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+failed to get: -128
+fatal: could not read Username for 'https://github.com': Device not configured
+
+🔄 Syncing portfolio widget — 2026-04-28 12:41
+==================================================
+  Fetching Convert trades from Binance...
+  ✅ Found 30 buy trades
+  💾 Saved 30 trades to trades.json
+
+  📊 Portfolio summary:
+     BTC: 0.04283817  |  cost: EUR2919.21  |  avg: EUR68145.07
+     SOL: 17.15428048  |  cost: EUR1654.31  |  avg: EUR96.44
+
+  ✅ portfolio.json written with 2 assets
+  ℹ️  Portfolio unchanged, no update needed
+
+  ⚠️  Git error: Command '['git', '-C', '/Users/denis/btc-avg-calculator', 'push', 'origin', 'main']' returned non-zero exit status 128.
+
+✅ Sync complete!
+
+
+🔄 Syncing portfolio widget — 2026-04-29 09:14
+==================================================
+  Fetching Convert trades from Binance...
+  ✅ Found 30 buy trades
+  💾 Saved 30 trades to trades.json
+
+  📊 Portfolio summary:
+     BTC: 0.04283817  |  cost: EUR2919.21  |  avg: EUR68145.07
+     SOL: 17.15428048  |  cost: EUR1654.31  |  avg: EUR96.44
+
+  ✅ portfolio.json written with 2 assets
+  ℹ️  Portfolio unchanged, no update needed
+
+  ℹ️  Nothing to commit
+
+✅ Sync complete!
+
