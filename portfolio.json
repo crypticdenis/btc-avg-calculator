@@ -1,15 +1,15 @@
 [
   {
     "asset": "BTC",
-    "amount": 0.04283817,
-    "totalCost": 2919.21,
+    "amount": 0.0136088,
+    "totalCost": 834.0,
     "currency": "EUR",
     "pair": "BTCEUR"
   },
   {
     "asset": "SOL",
-    "amount": 17.15428048,
-    "totalCost": 1654.31,
+    "amount": 6.67827152,
+    "totalCost": 510.0,
     "currency": "EUR",
     "pair": "SOLEUR"
   }
